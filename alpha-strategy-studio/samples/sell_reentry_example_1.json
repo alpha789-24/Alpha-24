@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 2,
+  "strategyType": "RULE_BUILDER",
+  "id": "sample-phase3-sell-reentry-1",
+  "name": "Sample Phase 3: SELL Re-entry Example 1 (Above RC1H then Below RC1L)",
+  "meta": {
+    "id": "sample-phase3-sell-reentry-1",
+    "name": "Sample Phase 3: SELL Re-entry Example 1 (Above RC1H then Below RC1L)",
+    "description": "Ordered 2-step SELL sequence: Step 1 price trades above RC1H, then Step 2 price trades below RC1L. Re-entry enabled after SL with 5m cooldown and SL at RC1H.",
+    "symbol": "NIFTY 50",
+    "status": "DRAFT"
+  },
+  "session": {
+    "timezone": "Asia/Kolkata",
+    "startTime": "09:15",
+    "endTime": "15:30",
+    "tradingDays": [
+      "MON",
+      "TUE",
+      "WED",
+      "THU",
+      "FRI"
+    ],
+    "holidayCalendar": "NONE",
+    "holidays": []
+  },
+  "indicators": [],
+  "levels": {
+    "provider": "MANUAL",
+    "placeholderAck": false
+  },
+  "rules": {
+    "entry": [
+      {
+        "id": "rule-sell-seq-rc1",
+        "enabled": true,
+        "order": 1,
+        "label": "SELL when price trades above RC1H then trades below RC1L",
+        "side": "SELL",
+        "condition": {
+          "type": "sequence",
+          "id": "seq-sell-rc1",
+          "enabled": true,
+          "order": 1,
+          "label": "Step 1: Above RC1H -> Step 2: Below RC1L",
+          "allowSameTick": false,
+          "timeoutMinutes": 60,
+          "steps": [
+            {
+              "type": "leaf",
+              "id": "step-1-above-rc1h",
+              "enabled": true,
+              "order": 1,
+              "label": "Price trades above RC1H",
+              "left": {
+                "kind": "price",
+                "field": "CLOSE",
+                "indicatorId": null,
+                "level": null,
+                "value": null
+              },
+              "operator": "trades_above",
+              "right": {
+                "kind": "level",
+                "field": null,
+                "indicatorId": null,
+                "level": "RC1H",
+                "value": null
+              },
+              "timeframe": "5m",
+              "candleRef": "current",
+              "evaluateOn": "CANDLE_CLOSE",
+              "params": {
+                "tolerance": null,
+                "toleranceUnit": null,
+                "tradeBasis": "CANDLE_CLOSE"
+              }
+            },
+            {
+              "type": "leaf",
+              "id": "step-2-below-rc1l",
+              "enabled": true,
+              "order": 2,
+              "label": "Price trades below RC1L",
+              "left": {
+                "kind": "price",
+                "field": "CLOSE",
+                "indicatorId": null,
+                "level": null,
+                "value": null
+              },
+              "operator": "trades_below",
+              "right": {
+                "kind": "level",
+                "field": null,
+                "indicatorId": null,
+                "level": "RC1L",
+                "value": null
+              },
+              "timeframe": "5m",
+              "candleRef": "current",
+              "evaluateOn": "CANDLE_CLOSE",
+              "params": {
+                "tolerance": null,
+                "toleranceUnit": null,
+                "tradeBasis": "CANDLE_CLOSE"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "exit": []
+  },
+  "stopLoss": {
+    "id": "sl-1",
+    "enabled": true,
+    "order": 1,
+    "label": "Fixed stop",
+    "method": "fixed_points",
+    "points": 10,
+    "percent": null,
+    "indicatorId": null,
+    "candlePrice": null,
+    "candleCount": null,
+    "bufferPercent": null,
+    "level": null
+  },
+  "targets": [
+    {
+      "id": "tgt-1",
+      "enabled": false,
+      "order": 1,
+      "label": "Optional target 1",
+      "value": 15,
+      "unit": "points",
+      "quantity": 0,
+      "level": null
+    },
+    {
+      "id": "tgt-2",
+      "enabled": false,
+      "order": 2,
+      "label": "Optional target 2",
+      "value": 15,
+      "unit": "points",
+      "quantity": 0,
+      "level": null
+    },
+    {
+      "id": "tgt-3",
+      "enabled": true,
+      "order": 3,
+      "label": "Final target",
+      "value": 15,
+      "unit": "points",
+      "quantity": 1,
+      "level": null
+    }
+  ],
+  "trailing": [],
+  "reentry": {
+    "enabled": true,
+    "maxPerDay": 2,
+    "afterStopLoss": true,
+    "afterTarget": false,
+    "afterManualExit": false,
+    "cooldownMinutes": 5,
+    "directions": [
+      "SELL"
+    ],
+    "stopLoss": {
+      "id": "reentry-sl-rc1h",
+      "enabled": true,
+      "order": 1,
+      "label": "Re-entry SL at RC1H",
+      "method": "level",
+      "points": null,
+      "percent": null,
+      "indicatorId": null,
+      "candlePrice": null,
+      "candleCount": null,
+      "bufferPercent": null,
+      "level": "RC1H"
+    },
+    "targets": [
+      {
+        "id": "reentry-tgt-fc1l",
+        "enabled": true,
+        "order": 1,
+        "label": "Re-entry Target FC1L",
+        "value": 0.0,
+        "unit": "price_level",
+        "quantity": 1,
+        "level": "FC1L"
+      }
+    ]
+  },
+  "risk": {
+    "maxDailyLoss": 2000,
+    "maxCapital": 25000,
+    "maxTradesPerDay": 3,
+    "maxOpenPositions": 2,
+    "maxQuantity": 1
+  },
+  "execution": {
+    "mode": "PAPER",
+    "liveRequested": false,
+    "quantity": 1,
+    "product": "PAPER",
+    "defaultEvaluationMode": "CANDLE_CLOSE",
+    "intrabarConflictOrder": "SL_FIRST",
+    "instrument": {
+      "underlying": "NIFTY 50",
+      "signalSource": "INDEX_SPOT",
+      "instrumentType": "INDEX_OPTIONS",
+      "optionType": "PE",
+      "strike": "ATM",
+      "expiry": "CURRENT_WEEK",
+      "contractSymbol": "NIFTY 50 ATM PE",
+      "lotSize": 25
+    }
+  }
+}

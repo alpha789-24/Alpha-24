@@ -1,0 +1,21 @@
+ALPHA24 STRATEGY STUDIO (V2.0 - LIVE MARKET EDITION)
+
+1) Start Backend:
+   Open backend folder and run 'run.bat' (or powershell start.ps1).
+   API runs at: http://127.0.0.1:8000
+   API Docs:    http://127.0.0.1:8000/docs
+
+2) Start Frontend:
+   Open frontend folder in another terminal:
+      npm install
+      npm run dev
+   Open UI at:  http://127.0.0.1:5173
+
+FEATURES INCLUDED:
+- Real-time live market feed for Indian Indices & Stocks (NIFTY, BANKNIFTY, SENSEX, etc.)
+- WebSocket price streaming with price change glow animations
+- Interactive Intraday Price & Volume charts (1m, 5m, 15m, 1d)
+- Custom Watchlist with NSE/BSE stock search
+- Strategy Builder with live spot prices and automatic option strike calculations
+- Simulated paper execution at live market prices with real-time P&L tracking and square-off
+- Secure IIFL broker session login integration

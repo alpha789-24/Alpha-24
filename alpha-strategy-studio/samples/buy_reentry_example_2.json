@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 2,
+  "strategyType": "RULE_BUILDER",
+  "id": "sample-phase3-buy-reentry-2",
+  "name": "Sample Phase 3: BUY Re-entry Example 2 (Below FC1L then Green Cross Above FC1H)",
+  "meta": {
+    "id": "sample-phase3-buy-reentry-2",
+    "name": "Sample Phase 3: BUY Re-entry Example 2 (Below FC1L then Green Cross Above FC1H)",
+    "description": "Ordered 2-step sequence: Step 1 price trades below FC1L, Step 2 green candle AND price crosses above FC1H.",
+    "symbol": "NIFTY 50",
+    "status": "DRAFT"
+  },
+  "session": {
+    "timezone": "Asia/Kolkata",
+    "startTime": "09:15",
+    "endTime": "15:30",
+    "tradingDays": [
+      "MON",
+      "TUE",
+      "WED",
+      "THU",
+      "FRI"
+    ],
+    "holidayCalendar": "NONE",
+    "holidays": []
+  },
+  "indicators": [],
+  "levels": {
+    "provider": "MANUAL",
+    "placeholderAck": false
+  },
+  "rules": {
+    "entry": [
+      {
+        "id": "rule-buy-seq-fc1",
+        "enabled": true,
+        "order": 1,
+        "label": "BUY when price trades below FC1L then green candle crosses above FC1H",
+        "side": "BUY",
+        "condition": {
+          "type": "sequence",
+          "id": "seq-buy-fc1",
+          "enabled": true,
+          "order": 1,
+          "label": "Step 1: Below FC1L -> Step 2: Green & Crosses Above FC1H",
+          "allowSameTick": false,
+          "timeoutMinutes": 90,
+          "steps": [
+            {
+              "type": "leaf",
+              "id": "step-1-below-fc1l",
+              "enabled": true,
+              "order": 1,
+              "label": "Price trades below FC1L",
+              "left": {
+                "kind": "price",
+                "field": "CLOSE",
+                "indicatorId": null,
+                "level": null,
+                "value": null
+              },
+              "operator": "trades_below",
+              "right": {
+                "kind": "level",
+                "field": null,
+                "indicatorId": null,
+                "level": "FC1L",
+                "value": null
+              },
+              "timeframe": "5m",
+              "candleRef": "current",
+              "evaluateOn": "CANDLE_CLOSE",
+              "params": {
+                "tolerance": null,
+                "toleranceUnit": null,
+                "tradeBasis": "CANDLE_CLOSE"
+              }
+            },
+            {
+              "type": "group",
+              "id": "step-2-group-fc1h",
+              "enabled": true,
+              "order": 2,
+              "label": "Green candle AND crosses above FC1H",
+              "logic": "AND",
+              "children": [
+                {
+                  "type": "leaf",
+                  "id": "step-2a-green",
+                  "enabled": true,
+                  "order": 1,
+                  "label": "5m candle is green",
+                  "left": null,
+                  "operator": "candle_green",
+                  "right": null,
+                  "timeframe": "5m",
+                  "candleRef": "current",
+                  "evaluateOn": "CANDLE_CLOSE",
+                  "params": {
+                    "tolerance": null,
+                    "toleranceUnit": null
+                  }
+                },
+                {
+                  "type": "leaf",
+                  "id": "step-2b-cross-fc1h",
+                  "enabled": true,
+                  "order": 2,
+                  "label": "CLOSE crosses above FC1H",
+                  "left": {
+                    "kind": "price",
+                    "field": "CLOSE",
+                    "indicatorId": null,
+                    "level": null,
+                    "value": null
+                  },
+                  "operator": "crosses_above",
+                  "right": {
+                    "kind": "level",
+                    "field": null,
+                    "indicatorId": null,
+                    "level": "FC1H",
+                    "value": null
+                  },
+                  "timeframe": "5m",
+                  "candleRef": "current",
+                  "evaluateOn": "CANDLE_CLOSE",
+                  "params": {
+                    "tolerance": null,
+                    "toleranceUnit": null
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "exit": []
+  },
+  "stopLoss": {
+    "id": "sl-1",
+    "enabled": true,
+    "order": 1,
+    "label": "Fixed stop",
+    "method": "fixed_points",
+    "points": 10,
+    "percent": null,
+    "indicatorId": null,
+    "candlePrice": null,
+    "candleCount": null,
+    "bufferPercent": null,
+    "level": null
+  },
+  "targets": [
+    {
+      "id": "tgt-1",
+      "enabled": false,
+      "order": 1,
+      "label": "Optional target 1",
+      "value": 15,
+      "unit": "points",
+      "quantity": 0,
+      "level": null
+    },
+    {
+      "id": "tgt-2",
+      "enabled": false,
+      "order": 2,
+      "label": "Optional target 2",
+      "value": 15,
+      "unit": "points",
+      "quantity": 0,
+      "level": null
+    },
+    {
+      "id": "tgt-3",
+      "enabled": true,
+      "order": 3,
+      "label": "Final target",
+      "value": 15,
+      "unit": "points",
+      "quantity": 1,
+      "level": null
+    }
+  ],
+  "trailing": [],
+  "reentry": {
+    "enabled": true,
+    "maxPerDay": 2,
+    "afterStopLoss": true,
+    "afterTarget": true,
+    "afterManualExit": false,
+    "cooldownMinutes": 5,
+    "directions": [
+      "BUY"
+    ],
+    "stopLoss": {
+      "id": "reentry-sl-rc1l",
+      "enabled": true,
+      "order": 1,
+      "label": "Re-entry SL at RC1L",
+      "method": "level",
+      "points": null,
+      "percent": null,
+      "indicatorId": null,
+      "candlePrice": null,
+      "candleCount": null,
+      "bufferPercent": null,
+      "level": "RC1L"
+    },
+    "targets": [
+      {
+        "id": "reentry-tgt-1",
+        "enabled": true,
+        "order": 1,
+        "label": "Re-entry Target RC2H",
+        "value": 0.0,
+        "unit": "price_level",
+        "quantity": 1,
+        "level": "RC2H"
+      }
+    ]
+  },
+  "risk": {
+    "maxDailyLoss": 2000,
+    "maxCapital": 25000,
+    "maxTradesPerDay": 3,
+    "maxOpenPositions": 2,
+    "maxQuantity": 1
+  },
+  "execution": {
+    "mode": "PAPER",
+    "liveRequested": false,
+    "quantity": 1,
+    "product": "PAPER",
+    "defaultEvaluationMode": "CANDLE_CLOSE",
+    "intrabarConflictOrder": "SL_FIRST",
+    "instrument": {
+      "underlying": "NIFTY 50",
+      "signalSource": "INDEX_SPOT",
+      "instrumentType": "INDEX_OPTIONS",
+      "optionType": "CE",
+      "strike": "ATM",
+      "expiry": "CURRENT_WEEK",
+      "contractSymbol": "NIFTY 50 ATM CE",
+      "lotSize": 25
+    }
+  }
+}

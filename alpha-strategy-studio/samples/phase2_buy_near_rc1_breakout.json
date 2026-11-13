@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 2,
+  "strategyType": "RULE_BUILDER",
+  "id": "sample-phase2-buy-near-rc1",
+  "name": "Sample Phase 2: BUY Near RC1L or Breakout FC1H",
+  "meta": {
+    "id": "sample-phase2-buy-near-rc1",
+    "name": "Sample Phase 2: BUY Near RC1L or Breakout FC1H",
+    "description": "Evaluates spot NIFTY 50 candles with manual FC/RC levels, RSI(14,14), and explicit proximity/breakout tolerances.",
+    "symbol": "NIFTY 50",
+    "status": "DRAFT"
+  },
+  "session": {
+    "timezone": "Asia/Kolkata",
+    "startTime": "09:15",
+    "endTime": "15:30",
+    "tradingDays": [
+      "MON",
+      "TUE",
+      "WED",
+      "THU",
+      "FRI"
+    ],
+    "holidayCalendar": "NONE",
+    "holidays": []
+  },
+  "indicators": [
+    {
+      "id": "rsi-14",
+      "enabled": true,
+      "order": 1,
+      "label": "RSI 14 (SMA 14)",
+      "type": "RSI",
+      "timeframe": "5m",
+      "source": "CLOSE",
+      "period": 14,
+      "smoothingPeriod": 14,
+      "multiplier": null,
+      "fastPeriod": null,
+      "slowPeriod": null,
+      "signalPeriod": null,
+      "stdDev": null,
+      "kPeriod": null,
+      "dPeriod": null
+    }
+  ],
+  "levels": {
+    "provider": "MANUAL",
+    "placeholderAck": false
+  },
+  "rules": {
+    "entry": [
+      {
+        "id": "entry-buy-1",
+        "enabled": true,
+        "order": 1,
+        "label": "BUY when price near RC1L or breaks out of FC1H with green candle",
+        "side": "BUY",
+        "condition": {
+          "type": "group",
+          "id": "grp-entry-1",
+          "enabled": true,
+          "order": 1,
+          "label": "Main Entry Group",
+          "logic": "AND",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "leaf-green",
+              "enabled": true,
+              "order": 1,
+              "label": "5m candle is green",
+              "left": null,
+              "operator": "candle_green",
+              "right": null,
+              "timeframe": "5m",
+              "candleRef": "current",
+              "evaluateOn": "CANDLE_CLOSE",
+              "params": {
+                "tolerance": null,
+                "toleranceUnit": null
+              }
+            },
+            {
+              "type": "group",
+              "id": "grp-or-level",
+              "enabled": true,
+              "order": 2,
+              "label": "Near RC1L or Moves Out of FC1H",
+              "logic": "OR",
+              "children": [
+                {
+                  "type": "leaf",
+                  "id": "leaf-buy-near-rc1l",
+                  "enabled": true,
+                  "order": 1,
+                  "label": "CLOSE buy_near RC1L within 5 points",
+                  "left": {
+                    "kind": "price",
+                    "field": "CLOSE",
+                    "indicatorId": null,
+                    "level": null,
+                    "value": null
+                  },
+                  "operator": "buy_near",
+                  "right": {
+                    "kind": "level",
+                    "field": null,
+                    "indicatorId": null,
+                    "level": "RC1L",
+                    "value": null
+                  },
+                  "timeframe": "5m",
+                  "candleRef": "current",
+                  "evaluateOn": "CANDLE_CLOSE",
+                  "params": {
+                    "tolerance": 5.0,
+                    "toleranceUnit": "points"
+                  }
+                },
+                {
+                  "type": "leaf",
+                  "id": "leaf-out-of-fc1h",
+                  "enabled": true,
+                  "order": 2,
+                  "label": "CLOSE moves_out_of FC1H by 3 points",
+                  "left": {
+                    "kind": "price",
+                    "field": "CLOSE",
+                    "indicatorId": null,
+                    "level": null,
+                    "value": null
+                  },
+                  "operator": "moves_out_of",
+                  "right": {
+                    "kind": "level",
+                    "field": null,
+                    "indicatorId": null,
+                    "level": "FC1H",
+                    "value": null
+                  },
+                  "timeframe": "5m",
+                  "candleRef": "current",
+                  "evaluateOn": "CANDLE_CLOSE",
+                  "params": {
+                    "tolerance": 3.0,
+                    "toleranceUnit": "points",
+                    "crossingMode": "close_cross",
+                    "breakoutDirection": "ABOVE"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "exit": []
+  },
+  "stopLoss": {
+    "id": "sl-1",
+    "enabled": true,
+    "order": 1,
+    "label": "Fixed stop",
+    "method": "fixed_points",
+    "points": 10,
+    "percent": null,
+    "indicatorId": null,
+    "candlePrice": null,
+    "candleCount": null,
+    "bufferPercent": null,
+    "level": null
+  },
+  "targets": [
+    {
+      "id": "tgt-1",
+      "enabled": false,
+      "order": 1,
+      "label": "Optional target 1",
+      "value": 15,
+      "unit": "points",
+      "quantity": 0,
+      "level": null
+    },
+    {
+      "id": "tgt-2",
+      "enabled": false,
+      "order": 2,
+      "label": "Optional target 2",
+      "value": 15,
+      "unit": "points",
+      "quantity": 0,
+      "level": null
+    },
+    {
+      "id": "tgt-3",
+      "enabled": true,
+      "order": 3,
+      "label": "Final target",
+      "value": 15,
+      "unit": "points",
+      "quantity": 1,
+      "level": null
+    }
+  ],
+  "trailing": [],
+  "reentry": {
+    "enabled": false,
+    "maxPerDay": 0,
+    "afterStopLoss": false,
+    "afterTarget": false,
+    "afterManualExit": false,
+    "cooldownMinutes": 0,
+    "directions": [],
+    "stopLoss": null,
+    "targets": []
+  },
+  "risk": {
+    "maxDailyLoss": 2000,
+    "maxCapital": 25000,
+    "maxTradesPerDay": 3,
+    "maxOpenPositions": 2,
+    "maxQuantity": 1
+  },
+  "execution": {
+    "mode": "PAPER",
+    "liveRequested": false,
+    "quantity": 1,
+    "product": "PAPER",
+    "defaultEvaluationMode": "CANDLE_CLOSE",
+    "intrabarConflictOrder": "SL_FIRST",
+    "instrument": {
+      "underlying": "NIFTY 50",
+      "signalSource": "INDEX_SPOT",
+      "instrumentType": "INDEX_OPTIONS",
+      "optionType": "CE",
+      "strike": "ATM",
+      "expiry": "CURRENT_WEEK",
+      "contractSymbol": "NIFTY 50 ATM CE",
+      "lotSize": 25
+    }
+  }
+}

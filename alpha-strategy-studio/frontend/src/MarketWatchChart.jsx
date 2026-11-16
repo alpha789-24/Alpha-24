@@ -304,10 +304,15 @@ export function MarketWatchChart({
 
       {/* Fallback indicator message */}
       {chartData?.fallback && (
-        <div className="chart-fallback-banner">
-          Showing {chartData.rangeUsed} / {chartData.intervalUsed} candles (intraday fallback session).
+        <div className="chart-fallback-banner" role="status">
+          <strong>Fallback Active:</strong> {chartData.fallbackReason || `Showing ${chartData.rangeUsed} / ${chartData.intervalUsed} candles instead of requested ${chartData.requestedRange || chartRange} / ${chartData.requestedInterval || chartInterval} (data provider limitations).`}
         </div>
       )}
+      <div className="chart-source-indicator">
+        <span className="chart-source-text">
+          Source: {chartData?.source || 'Yahoo Finance (Delayed ~15m)'} • Exchange real-time feed requires active broker market-data connection.
+        </span>
+      </div>
 
       {/* SVG Interactive Chart Canvas */}
       <div

@@ -385,6 +385,14 @@ class Meta(StrictModel):
     description: str
     symbol: str
     status: Literal["DRAFT", "SAVED", "BACKTESTING", "PAPER", "ACTIVE", "PAUSED", "STOPPED", "ERROR"]
+    sourceType: Optional[str] = None
+    version: Optional[int] = None
+    importVersion: Optional[int] = None
+    validationStatus: Optional[str] = None
+    contentHash: Optional[str] = None
+    maskedSource: Optional[str] = None
+    analysisReport: Optional[dict[str, Any]] = None
+    note: Optional[str] = None
 
 
 class RuleBuilderStrategy(StrictModel):
@@ -403,6 +411,13 @@ class RuleBuilderStrategy(StrictModel):
     reentry: Reentry
     risk: RiskConfig
     execution: ExecutionConfig
+    sourceType: Optional[str] = None
+    version: Optional[int] = None
+    importVersion: Optional[int] = None
+    validationStatus: Optional[str] = None
+    contentHash: Optional[str] = None
+    maskedSource: Optional[str] = None
+    analysisReport: Optional[dict[str, Any]] = None
 
 
 def _blank_operand() -> dict:

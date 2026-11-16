@@ -398,11 +398,13 @@ def test_api_search_lot_size_and_capabilities_endpoints():
             contract_master_service._rows_by_segment.clear()
             contract_master_service._by_id.clear()
             contract_master_service._by_spec.clear()
+            # Stale date so it cannot reload persisted tmpdir cache
+            contract_master_service._today_ist = lambda: "2099-01-01"
+            caps_empty = get_broker_capabilities()
             contract_master_service.cache_dir = orig_dir
             contract_master_service._today_ist = orig_today
 
         # After clearing, capabilities must NOT fall back to hardcoded 25/15
-        caps_empty = get_broker_capabilities()
         assert caps_empty["lotSizes"] == {}
     print("ok - /api/contracts/search, /api/contracts/lot-size & /api/broker/capabilities")
 

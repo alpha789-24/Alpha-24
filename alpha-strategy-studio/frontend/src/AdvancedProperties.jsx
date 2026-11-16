@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { X, ChevronDown, ChevronRight, RotateCcw, Eye, EyeOff } from 'lucide-react';
+import { X, ChevronDown, ChevronRight, RotateCcw, ShieldCheck } from 'lucide-react';
 
 // Property-grid definition. `path` is a dot-path into the strategy object so existing config is preserved on apply.
-const T = { num: 'number', int: 'int', sel: 'select', time: 'time', bool: 'bool', text: 'text', secret: 'secret' };
+const T = { num: 'number', int: 'int', sel: 'select', time: 'time', bool: 'bool', text: 'text' };
 const GROUPS = (isSar) => [
   { id: 'session', title: 'Session', props: [
     { path: isSar ? 'sar.startTime' : 'session.startTime', label: 'Session start', type: T.time, def: '09:15', min: '09:15', max: '15:30' },
@@ -47,9 +47,7 @@ const GROUPS = (isSar) => [
   { id: 'algo', title: 'AlgoAction Module', props: [
     { path: 'advanced.orderPlacementMode', label: 'Order placement mode', type: T.sel, def: 'PAPER', opts: ['PAPER', 'SIGNAL_ONLY'], note: 'Live trading is enabled only through the go-live checklist with typed confirmation, never from this panel.' },
     { path: 'advanced.checkFrequency', label: 'Check frequency', type: T.sel, def: 'CONTINUOUS', opts: ['CONTINUOUS', 'CANDLE_CLOSE'] },
-    { path: 'advanced.rollover', label: 'Rollover', type: T.sel, def: 'NONE', opts: ['NONE', 'NEXT_EXPIRY'] },
-    { path: 'advanced.apiKey', label: 'API key', type: T.secret, def: '', note: 'Credentials are managed server-side on the IIFL Connection page. Never stored in the strategy.' },
-    { path: 'advanced.apiSecret', label: 'API secret', type: T.secret, def: '', note: 'Never stored in the strategy.' }
+    { path: 'advanced.rollover', label: 'Rollover', type: T.sel, def: 'NONE', opts: ['NONE', 'NEXT_EXPIRY'] }
   ]}
 ];
 
@@ -68,7 +66,6 @@ const toMin = t => { const [h, m] = String(t || '').split(':').map(Number); retu
 function validateAll(groups, draft) {
   const errs = {};
   groups.forEach(g => g.props.forEach(p => {
-    if (p.type === T.secret) return;
     const v = getPath(draft, p.path);
     if (v === '' || v == null) { if (p.type !== T.text) errs[p.path] = 'Required'; return; }
     if (p.type === T.num || p.type === T.int) {
@@ -94,34 +91,43 @@ export function AdvancedProperties({ strategy, onApply, onClose }) {
   // Start from the current strategy values; fall back to defaults only for unset keys (preserves existing config).
   const initial = useMemo(() => {
     let d = structuredClone(strategy);
-    groups.forEach(g => g.props.forEach(p => { if (p.type !== T.secret && getPath(d, p.path) == null) d = setPath(d, p.path, p.def); }));
+    groups.forEach(g => g.props.forEach(p => { if (getPath(d, p.path) == null) d = setPath(d, p.path, p.def); }));
+    // Permanently remove any legacy credential fields from draft
+    if (d.advanced) {
+      delete d.advanced.apiKey;
+      delete d.advanced.apiSecret;
+    }
     return d;
   }, [strategy, groups]);
   const [draft, setDraft] = useState(initial);
   const [open, setOpen] = useState(() => Object.fromEntries(groups.map((g, i) => [g.id, i < 2])));
-  const [reveal, setReveal] = useState({});
-  const [secrets, setSecrets] = useState({});
   const errs = useMemo(() => validateAll(groups, draft), [groups, draft]);
   const bad = Object.keys(errs).length;
   const set = (p, v) => setDraft(d => setPath(d, p.path, v));
-  const resetAll = () => { if (window.confirm('Reset all advanced properties to their defaults?')) { let d = structuredClone(strategy); groups.forEach(g => g.props.forEach(p => { if (p.type !== T.secret) d = setPath(d, p.path, p.def); })); setDraft(d); } };
+  const resetAll = () => {
+    if (window.confirm('Reset all advanced properties to their defaults?')) {
+      let d = structuredClone(strategy);
+      groups.forEach(g => g.props.forEach(p => { d = setPath(d, p.path, p.def); }));
+      if (d.advanced) { delete d.advanced.apiKey; delete d.advanced.apiSecret; }
+      setDraft(d);
+    }
+  };
 
-  const apply = () => { if (bad) return; onApply(draft); };
+  const apply = () => {
+    if (bad) return;
+    const cleaned = structuredClone(draft);
+    if (cleaned.advanced) {
+      delete cleaned.advanced.apiKey;
+      delete cleaned.advanced.apiSecret;
+    }
+    onApply(cleaned);
+  };
 
   const control = p => {
     const v = getPath(draft, p.path);
     if (p.type === T.sel) return <select value={v ?? p.def} onChange={e => set(p, e.target.value)}>{p.opts.map(o => <option key={o}>{o}</option>)}</select>;
     if (p.type === T.bool) return <button type="button" className={`toggle ${v ? 'on' : ''}`} onClick={() => set(p, !v)} aria-pressed={!!v}><i /></button>;
     if (p.type === T.time) return <input type="time" value={v ?? ''} min={p.min} max={p.max} onChange={e => set(p, e.target.value)} />;
-    if (p.type === T.secret) {
-      const shown = reveal[p.path];
-      return (
-        <div className="secret-in">
-          <input type={shown ? 'text' : 'password'} autoComplete="off" placeholder="•••••••• (masked, not saved)" value={secrets[p.path] || ''} onChange={e => setSecrets(s => ({ ...s, [p.path]: e.target.value }))} disabled />
-          <button type="button" disabled title="Credentials are not editable here" onClick={() => setReveal(r => ({ ...r, [p.path]: !r[p.path] }))}>{shown ? <EyeOff size={13} /> : <Eye size={13} />}</button>
-        </div>
-      );
-    }
     if (p.type === T.text) return <input value={v ?? ''} onChange={e => set(p, e.target.value)} />;
     return <input type="number" step={p.type === T.int ? 1 : 'any'} value={v ?? ''} onChange={e => set(p, e.target.value === '' ? '' : Number(e.target.value))} />;
   };

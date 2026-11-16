@@ -1,10 +1,11 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Any, List, Optional
 import asyncio
+import collections
 import hashlib, json, requests, secrets, time, threading, traceback
 from datetime import datetime, timezone, timedelta
 
@@ -52,8 +53,7 @@ from .backtest_engine import (
     run_backtest,
     step_paper_worker_run,
 )
-from .broker_execution import (
-    BrokerSessionExpiredError,
+from .broker_execution import (    BrokerSessionExpiredError,
     IIFLBrokerAdapter,
     approve_strategy_for_live,
     compute_broker_positions_and_pnl,
@@ -64,6 +64,12 @@ from .broker_execution import (
     validate_execution_settings,
 )
 from .samples import all_sample_strategies
+from .python_analyzer import (
+    analyse_source,
+    decode_source,
+    validate_source_bytes,
+    MAX_SOURCE_BYTES,
+)
 
 def _refresh_contract_master_startup():
     try:
@@ -1206,8 +1212,11 @@ def get_live_market(symbols: Optional[str] = None):
 
     quotes = market_service.get_quotes_batch(sym_list)
     return {
-        'source': 'LIVE YAHOO/NSE FEED',
-        'isLive': True,
+        'source': 'YAHOO FINANCE (DELAYED ~15m)',
+        'isLive': False,
+        'feedType': 'DELAYED_YAHOO',
+        'exchangeRealtime': False,
+        'disclaimer': 'Quotes are sourced from Yahoo Finance and may be delayed versus real-time exchange ticks.',
         'updatedAt': time.time(),
         'items': quotes
     }
@@ -1523,14 +1532,26 @@ def close_paper_trade(payload: CloseTradePayload):
 
 @app.get('/api/iifl/status')
 def iifl_status():
-    expired = bool(getattr(app.state, 'iifl_session_expired', False))
+    # NOTE: This endpoint MUST return only booleans / safe metadata.
+    # App Key, App Secret, authCode and session token MUST NEVER appear in this response.
+    has_creds   = bool(settings.app_key and settings.app_secret)
+    has_token   = bool(getattr(app.state, 'iifl_token', None))
+    expired     = bool(getattr(app.state, 'iifl_session_expired', False))
+    has_profile = bool(getattr(app.state, 'iifl_profile_verified', False))
     return {
-        'configured': bool(settings.app_key and settings.app_secret),
-        'sessionPresent': bool(getattr(app.state, 'iifl_token', None)),
-        'sessionExpired': expired,
+        # ── New four-boolean shape (UI v2) ──────────────────────────────────
+        'credentialsConfigured':    has_creds,
+        'authenticationCompleted':  has_token and not expired,
+        'profileVerified':          has_profile and has_token and not expired,
+        'sessionActive':            has_token and not expired,
+        'sessionExpired':           expired,
+        # ── Legacy keys retained for backward compatibility ─────────────────
+        'configured':               has_creds,
+        'sessionPresent':           has_token and not expired,
         'sessionMessage': 'Session expired, reconnect' if expired else None,
+        # ── Safe metadata (not secrets) ─────────────────────────────────────
         'baseUrl': settings.iifl_base,
-        'liveOrdersEnabled': False
+        'liveOrdersEnabled': False,
     }
 
 @app.get('/api/iifl/login-url')
@@ -1545,6 +1566,7 @@ def _clear_expired_iifl_session():
     app.state.iifl_token = None
     app.state.iifl_client_id = None
     app.state.iifl_session_expired = True
+    app.state.iifl_profile_verified = False
 
 def _exchange_iifl_session(client_id: str, auth_code: str):
     if not settings.app_secret:
@@ -1601,6 +1623,8 @@ def iifl_profile():
             if any(c in blob for c in ('EC044', 'EC055', 'EC075')):
                 _clear_expired_iifl_session()
                 raise HTTPException(401, 'Session expired, reconnect')
+        # Mark profile as verified in backend state (boolean only — no data stored here)
+        app.state.iifl_profile_verified = True
         return data
     except HTTPException:
         raise
@@ -1618,7 +1642,90 @@ def iifl_logout():
     app.state.iifl_token = None
     app.state.iifl_client_id = None
     app.state.iifl_session_expired = False
+    app.state.iifl_profile_verified = False
     return {'ok': True, 'message': 'Local IIFL session cleared.'}
+
+# ==================== PYTHON STRATEGY IMPORTER ====================
+# SECURITY: Python source is NEVER executed, imported, eval'd, compile()-and-run,
+# or passed to subprocess. Only ast.parse + static AST visitor traversal.
+
+# Simple in-memory rate limiter: max 120 analyse calls per IP per minute.
+_PYTHON_IMPORT_RATE: dict = collections.defaultdict(list)
+_PYTHON_IMPORT_LIMIT = 120
+_PYTHON_IMPORT_WINDOW = 60  # seconds
+
+
+def _check_python_import_rate(ip: str) -> bool:
+    """Return True if the request is within rate limit."""
+    now = time.time()
+    timestamps = _PYTHON_IMPORT_RATE[ip]
+    # Prune old entries
+    _PYTHON_IMPORT_RATE[ip] = [t for t in timestamps if now - t < _PYTHON_IMPORT_WINDOW]
+    if len(_PYTHON_IMPORT_RATE[ip]) >= _PYTHON_IMPORT_LIMIT:
+        return False
+    _PYTHON_IMPORT_RATE[ip].append(now)
+    return True
+
+
+class PythonAnalysePayload(BaseModel):
+    source: str = Field(min_length=1)
+    filename: str = Field(default='strategy.py', max_length=120)
+
+
+@app.post('/api/python-import/analyse')
+async def python_import_analyse_text(payload: PythonAnalysePayload, request: Request):
+    """
+    Analyse pasted Python source text. Static analysis only — source is NEVER executed.
+    """
+    ip = request.client.host if request.client else '127.0.0.1'
+    if not _check_python_import_rate(ip):
+        raise HTTPException(429, 'Rate limit: max 10 analyses per minute. Please wait.')
+
+    source_bytes = payload.source.encode('utf-8', errors='replace')
+    ok, err = validate_source_bytes(source_bytes)
+    if not ok:
+        raise HTTPException(400, err)
+
+    # Reject non-.py filenames
+    fname = payload.filename.strip()
+    if not fname.endswith('.py'):
+        fname = 'strategy.py'
+
+    # Static analysis only — NEVER executes source
+    report = analyse_source(payload.source, filename=fname)
+    return report
+
+
+@app.post('/api/python-import/upload')
+async def python_import_upload_file(request: Request, file: UploadFile = File(...)):
+    """
+    Analyse an uploaded .py file. Static analysis only — file is NEVER written to disk
+    under its original name, never executed, never imported.
+    """
+    ip = request.client.host if request.client else '127.0.0.1'
+    if not _check_python_import_rate(ip):
+        raise HTTPException(429, 'Rate limit: max 10 analyses per minute. Please wait.')
+
+    # Filename validation
+    original_name = (file.filename or 'strategy.py').strip()
+    if not original_name.endswith('.py'):
+        raise HTTPException(400, 'Only .py files are accepted.')
+
+    # Read into memory — NEVER write to a path derived from file.filename
+    raw = await file.read()
+
+    ok, err = validate_source_bytes(raw)
+    if not ok:
+        raise HTTPException(400, err)
+
+    source, decode_err = decode_source(raw)
+    if source is None:
+        raise HTTPException(400, decode_err)
+
+    # Static analysis only — NEVER executes source
+    report = analyse_source(source, filename=original_name)
+    return report
+
 
 # ==================== STOP-AND-REVERSE (LEVEL_SAR) ENGINE ====================
 

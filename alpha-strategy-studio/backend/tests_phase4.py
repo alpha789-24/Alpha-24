@@ -53,6 +53,24 @@ def sample_phase4_trailing_partial_targets():
     s["execution"]["instrument"]["lotSize"] = 25
     return s
 from app.schema_v2 import LEVEL_NAMES, new_rule_builder
+from app.contract_master import contract_master_service
+import pytest
+
+@pytest.fixture(autouse=True)
+def isolate_contract_master():
+    orig_dir = contract_master_service.cache_dir
+    orig_rows = dict(contract_master_service._rows_by_segment)
+    orig_meta = dict(contract_master_service._meta)
+    with tempfile.TemporaryDirectory() as tmp:
+        contract_master_service.cache_dir = Path(tmp)
+        contract_master_service._rows_by_segment.clear()
+        contract_master_service._meta.clear()
+        yield
+    contract_master_service.cache_dir = orig_dir
+    contract_master_service._rows_by_segment.clear()
+    contract_master_service._rows_by_segment.update(orig_rows)
+    contract_master_service._meta.clear()
+    contract_master_service._meta.update(orig_meta)
 
 passed = 0
 failed = 0
@@ -288,6 +306,7 @@ def test_partial_targets_and_validation():
             entry_time="2026-01-05T09:20:00+05:30",
             candles_by_tf={"5m": []},
             level_book=book,
+            lot_size=25,
         )
         check(
             "Managed position opened with 4 lots and targets [24020, 24060, 24120]",
@@ -472,7 +491,7 @@ def test_intrabar_ambiguity_modes():
         strat_sl_first = copy.deepcopy(base_strat)
         strat_sl_first["execution"]["intrabarConflictOrder"] = "SL_FIRST"
         pos_a = open_managed_position(
-            strat_sl_first, "BUY", 24000.0, "2026-01-05T09:20:00+05:30", {"5m": []}, level_book=book
+            strat_sl_first, "BUY", 24000.0, "2026-01-05T09:20:00+05:30", {"5m": []}, level_book=book, lot_size=25
         )
         res_a = step_open_position(pos_a, ambig_candle, strat_sl_first, engine, {"5m": [ambig_candle]}, "2026-01-05T09:25:00+05:30")
         check(
@@ -489,7 +508,7 @@ def test_intrabar_ambiguity_modes():
         strat_tgt_first = copy.deepcopy(base_strat)
         strat_tgt_first["execution"]["intrabarConflictOrder"] = "TARGET_FIRST"
         pos_b = open_managed_position(
-            strat_tgt_first, "BUY", 24000.0, "2026-01-05T09:20:00+05:30", {"5m": []}, level_book=book
+            strat_tgt_first, "BUY", 24000.0, "2026-01-05T09:20:00+05:30", {"5m": []}, level_book=book, lot_size=25
         )
         res_b = step_open_position(pos_b, ambig_candle, strat_tgt_first, engine, {"5m": [ambig_candle]}, "2026-01-05T09:25:00+05:30")
         check(
@@ -514,7 +533,7 @@ def test_intrabar_ambiguity_modes():
         strat_ltf = copy.deepcopy(base_strat)
         strat_ltf["execution"]["intrabarConflictOrder"] = "LOWER_TIMEFRAME"
         pos_c = open_managed_position(
-            strat_ltf, "BUY", 24000.0, "2026-01-05T09:20:00+05:30", {"5m": []}, level_book=book
+            strat_ltf, "BUY", 24000.0, "2026-01-05T09:20:00+05:30", {"5m": []}, level_book=book, lot_size=25
         )
         res_c = step_open_position(
             pos_c,

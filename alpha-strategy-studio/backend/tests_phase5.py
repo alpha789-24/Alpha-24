@@ -33,6 +33,24 @@ from app.condition_engine import ConditionEngine
 from app.levels import LevelBook
 from app.main import app
 from app.repos import JsonEvaluationStateRepo, JsonLevelRepo, JsonListRepo
+from app.contract_master import contract_master_service
+import pytest
+
+@pytest.fixture(autouse=True)
+def isolate_contract_master():
+    orig_dir = contract_master_service.cache_dir
+    orig_rows = dict(contract_master_service._rows_by_segment)
+    orig_meta = dict(contract_master_service._meta)
+    with tempfile.TemporaryDirectory() as tmp:
+        contract_master_service.cache_dir = Path(tmp)
+        contract_master_service._rows_by_segment.clear()
+        contract_master_service._meta.clear()
+        yield
+    contract_master_service.cache_dir = orig_dir
+    contract_master_service._rows_by_segment.clear()
+    contract_master_service._rows_by_segment.update(orig_rows)
+    contract_master_service._meta.clear()
+    contract_master_service._meta.update(orig_meta)
 from app.samples import (
     sample_buy_near_rc1_breakout_strategy as _s1,
     sample_buy_reentry_example_1 as _s2,

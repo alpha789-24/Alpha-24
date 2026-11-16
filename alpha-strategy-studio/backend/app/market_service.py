@@ -526,11 +526,27 @@ class MarketDataService:
                 if cache_key in self._chart_cache and (now - self._chart_timestamps.get(cache_key, 0.0) < ttl):
                     return self._chart_cache[cache_key]
 
-            # Build attempt sequence: requested first, then fallbacks
+            # Build attempt sequence: requested first, then sensible interval fallbacks within requested range
             base_attempts = [(range_period, interval)]
-            for r_fb, i_fb in [("5d", "15m"), ("1mo", "1d")]:
-                if (r_fb, i_fb) not in base_attempts:
-                    base_attempts.append((r_fb, i_fb))
+            if range_period in ("1y", "6mo", "3mo", "1mo"):
+                for i_alt in ("1d", "1wk"):
+                    if (range_period, i_alt) not in base_attempts:
+                        base_attempts.append((range_period, i_alt))
+                for r_alt, i_alt in [("1mo", "1d"), ("5d", "15m")]:
+                    if (r_alt, i_alt) not in base_attempts:
+                        base_attempts.append((r_alt, i_alt))
+            elif range_period == "5d":
+                for i_alt in ("15m", "5m", "30m", "1h"):
+                    if (range_period, i_alt) not in base_attempts:
+                        base_attempts.append((range_period, i_alt))
+                if ("1d", "5m") not in base_attempts:
+                    base_attempts.append(("1d", "5m"))
+            else: # "1d"
+                for i_alt in ("5m", "15m", "1m", "30m"):
+                    if (range_period, i_alt) not in base_attempts:
+                        base_attempts.append((range_period, i_alt))
+                if ("5d", "15m") not in base_attempts:
+                    base_attempts.append(("5d", "15m"))
 
             tickers_to_try = [ticker]
             if ticker.endswith(".NS") and not ticker.startswith("^"):
@@ -551,9 +567,20 @@ class MarketDataService:
                             "previousClose": meta.get("chartPreviousClose"),
                             "currency": meta.get("currency", "INR"),
                             "exchange": meta.get("exchangeName", "NSE"),
+                            "requestedRange": range_period,
+                            "requestedInterval": interval,
                             "rangeUsed": r_try,
                             "intervalUsed": i_try,
-                            "fallback": is_fallback
+                            "fallback": is_fallback,
+                            "fallbackReason": (
+                                f"Requested {range_period}/{interval} could not be retrieved from provider; "
+                                f"displaying {r_try}/{i_try} candles instead."
+                                if is_fallback else None
+                            ),
+                            "source": "YAHOO FINANCE (DELAYED ~15m)",
+                            "isRealtimeExchange": False,
+                            "disclaimer": "Market candles are sourced from Yahoo Finance v8 and may be delayed 1-15 minutes vs real-time exchange ticks.",
+                            "updatedAt": time.time(),
                         }
                         with self._lock:
                             self._chart_cache[cache_key] = chart_res
@@ -570,9 +597,12 @@ class MarketDataService:
                 "symbol": symbol_or_name,
                 "ticker": ticker,
                 "candles": [],
+                "requestedRange": range_period,
+                "requestedInterval": interval,
                 "rangeUsed": range_period,
                 "intervalUsed": interval,
                 "fallback": False,
+                "source": "YAHOO FINANCE (DELAYED ~15m)",
                 "error": last_error or "Yahoo has no candles for this instrument right now."
             }
 

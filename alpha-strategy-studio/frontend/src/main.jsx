@@ -22,6 +22,8 @@ import { StrikeSelector } from './StrikeSelector.jsx';
 import { AdvancedProperties } from './AdvancedProperties.jsx';
 import SavedStrategies from './SavedStrategies.jsx';
 import { getMarketPollIntervalMs, getOperationalPollIntervalMs } from './pollingConfig.js';
+import { IIFLConnection } from './IIFLConnection.jsx';
+import PythonImporter from './PythonImporter.jsx';
 
 const RuleBuilderEditor = lazy(() =>
   import('./RuleBuilderPanels.jsx').then(m => ({ default: m.RuleBuilderEditor }))
@@ -78,6 +80,7 @@ const navItems = [
   ['Overview', LayoutDashboard],
   ['Strategy Builder', Layers3],
   ['My Strategies', FolderOpen],
+  ['Python Importer', Code2],
   ['Positions & Trades', BriefcaseBusiness],
   ['Market Watch', Activity],
   ['IIFL Connection', Wifi],
@@ -305,26 +308,15 @@ function App() {
         if (data && data.candles && data.candles.length > 0) {
           setChartData({ ...data, forSymbol: symbol });
         } else {
-          setChartData(prev => {
-            if (prev?.forSymbol === symbol && prev?.candles?.length > 0 && (!data || !data.candles || data.candles.length === 0)) {
-              return { ...prev, forSymbol: symbol };
-            }
-            return { ...(data || {}), forSymbol: symbol, ticker: data?.ticker || symbol, candles: [] };
-          });
+          setChartData({ ...(data || {}), forSymbol: symbol, ticker: data?.ticker || symbol, candles: [], error: data?.error || 'No candles returned for this range' });
         }
       } else {
-        setChartData(prev => {
-          if (prev?.forSymbol === symbol && prev?.candles?.length > 0) return prev;
-          return { forSymbol: symbol, symbol, ticker: symbol, candles: [], error: `HTTP ${res.status}` };
-        });
+        setChartData({ forSymbol: symbol, symbol, ticker: symbol, candles: [], error: `HTTP ${res.status}` });
       }
     } catch (e) {
       console.error('Failed to load chart:', e);
       if (id === chartReqId.current) {
-        setChartData(prev => {
-          if (prev?.forSymbol === symbol && prev?.candles?.length > 0) return prev;
-          return { forSymbol: symbol, symbol, ticker: symbol, candles: [], error: String(e.message || e) };
-        });
+        setChartData({ forSymbol: symbol, symbol, ticker: symbol, candles: [], error: String(e.message || e) });
       }
     } finally {
       if (id === chartReqId.current) {
@@ -1041,9 +1033,12 @@ function App() {
       <main className="main">
         {/* Real-time Streaming Ticker Marquee with hover pause & indicators */}
         <div className="live-ticker-bar">
-          <div className="ticker-live-badge">
+          <div
+            className={`ticker-live-badge ${iifl.configured && iifl.sessionPresent && wsConnected ? 'ticker-live-badge--live' : 'ticker-live-badge--delayed'}`}
+            title={iifl.configured && iifl.sessionPresent && wsConnected ? 'IIFL Live Broker Stream Active' : 'Public market feed (Yahoo Finance delayed ~15m)'}
+          >
             <span className="pulse-dot"></span>
-            LIVE NSE/BSE
+            {iifl.configured && iifl.sessionPresent && wsConnected ? 'IIFL LIVE' : 'NSE/BSE (DELAYED ~15m)'}
           </div>
           {marketQuotes.slice(0, 12).map(q => {
             const isPos = (q.change || 0) >= 0;
@@ -1282,7 +1277,17 @@ function App() {
               <span><b>Paper</b> simulates fills on live prices — <u>no real orders</u>.</span>
               <span><b>Live</b> places real broker orders and needs the separate go-live checklist.</span>
             </div>
-            {saveState && <div className={`save-banner ${saveState.ok ? 'ok' : 'bad'}`} role="status">{saveState.msg}<button onClick={() => setSaveState(null)} aria-label="Dismiss"><X size={13} /></button></div>}
+            {saveState && (
+              <div className={`save-banner ${saveState.ok ? 'ok' : 'bad'}`} role="status">
+                <span>{saveState.msg}</span>
+                {saveState.ok && (
+                  <button type="button" className="outline" onClick={() => go('My Strategies')} style={{ marginLeft: 10, padding: '3px 10px', fontSize: 12, height: 26, alignSelf: 'center' }}>
+                    Open My Strategies →
+                  </button>
+                )}
+                <button onClick={() => setSaveState(null)} aria-label="Dismiss"><X size={13} /></button>
+              </div>
+            )}
             <div className="builder-layout">
               <div className="builder-main">
                 {/* 01: Strategy Details */}
@@ -2244,114 +2249,26 @@ function App() {
 
         {/* ==================== PAGE: IIFL CONNECTION ==================== */}
         {page === 'IIFL Connection' && (
-          <section className="content">
-            <PageTitle eyebrow="BROKER INTEGRATION" title="IIFL Connection" sub="Configure your IIFL Markets app credentials securely on the local backend." />
-            <div className="notice">
-              <ShieldCheck size={19} />
-              <div>
-                <b>Credential Safety Protocol</b>
-                <span>Tokens and authCodes are handled strictly in backend process memory. Never exposed to browser or committed to repository.</span>
-              </div>
-            </div>
+          <IIFLConnection
+            iifl={iifl}
+            notify={notify}
+            loadData={loadData}
+            API={API}
+          />
+        )}
 
-            <div className="connection-grid">
-              <div className="panel section-card">
-                <div className="panel-head">
-                  <div>
-                    <h3>Connection status</h3>
-                    <p>Backend-managed IIFL session</p>
-                  </div>
-                  <span className={`tag ${iifl.sessionPresent ? 'success' : iifl.sessionExpired ? 'draft' : 'muted'}`}>
-                    {iifl.sessionPresent ? 'SESSION ACTIVE' : iifl.sessionExpired ? 'Session expired, reconnect' : 'NOT CONNECTED'}
-                  </span>
-                </div>
-                <div className="connect-status">
-                  <div className="connect-icon"><Wifi size={26} /></div>
-                  <div>
-                    <b>{iifl.configured ? 'App credentials configured' : 'App credentials not configured'}</b>
-                    <p>{iifl.configured ? 'IIFL app key and secret are present in backend environment.' : 'Add your IIFL App Key and App Secret to backend/.env.'}</p>
-                  </div>
-                </div>
-                <div className="step-list">
-                  <div><i>1</i><div><b>Configure app credentials</b><p>Open backend/.env and add the App Key and App Secret issued for your IIFL developer application.</p></div></div>
-                  <div><i>2</i><div><b>Complete official login</b><p>Open IIFL login, complete your own account authentication and OTP/TOTP.</p></div></div>
-                  <div><i>3</i><div><b>Create today's session</b><p>Enter clientId and authCode below. Backend generates the SHA-256 checksum and exchanges for userSession.</p></div></div>
-                  <div><i>4</i><div><b>Verify profile</b><p>Check enabled exchanges and permissions. Session refreshes each trading day.</p></div></div>
-                </div>
-                <div className="connect-actions">
-                  <button className="primary" onClick={async () => {
-                    try {
-                      let r = await fetch(API + '/iifl/login-url');
-                      let d = await r.json();
-                      if (!r.ok) throw Error(d.detail);
-                      window.open(d.url, '_blank', 'noopener,noreferrer');
-                    } catch (e) {
-                      notify(e.message || 'Start backend and configure App Key first');
-                    }
-                  }}>
-                    <ExternalLink size={16} /> Open IIFL login
-                  </button>
-                  <button className="outline" onClick={async () => {
-                    try {
-                      let r = await fetch(API + '/iifl/profile');
-                      if (!r.ok) {
-                        const errData = await r.json().catch(() => ({}));
-                        if (r.status === 401) loadData();
-                        throw Error(errData.detail || 'Session expired, reconnect');
-                      }
-                      notify('IIFL profile retrieved successfully');
-                    } catch (e) {
-                      notify(e.message);
-                    }
-                  }}>
-                    Verify profile
-                  </button>
-                </div>
-              </div>
-
-              <div className="panel section-card">
-                <h3>Exchange session</h3>
-                <p className="sub">Use a fresh authCode for each session.</p>
-                <form onSubmit={async e => {
-                  e.preventDefault();
-                  const form = e.currentTarget;
-                  let f = new FormData(form);
-                  try {
-                    let r = await fetch(API + '/iifl/session', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ clientId: f.get('clientId'), authCode: f.get('authCode') })
-                    });
-                    let d = await r.json();
-                    if (!r.ok) throw Error(d.detail);
-                    notify(d.message);
-                    form.reset();
-                    loadData();
-                  } catch (err) {
-                    notify(err.message);
-                  }
-                }}>
-                  <Field label="Client ID"><input name="clientId" required autoComplete="off" placeholder="Client ID returned by IIFL" /></Field>
-                  <Field label="Fresh authCode"><input name="authCode" required autoComplete="off" type="password" placeholder="Paste current authCode" /></Field>
-                  <p className="field-help">The authCode is sent directly to your local backend and is not saved in browser storage.</p>
-                  <button className="primary" type="submit"><ShieldCheck size={16} /> Generate IIFL session</button>
-                </form>
-                <div className="connect-actions">
-                  <button className="outline danger-outline" onClick={async () => {
-                    try {
-                      await fetch(API + '/iifl/logout', { method: 'POST' });
-                      notify('Local session cleared');
-                      loadData();
-                    } catch {
-                      notify('Backend unavailable');
-                    }
-                  }}>
-                    <LogOut size={15} /> Logout session
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
+        {/* ==================== PAGE: PYTHON IMPORTER ==================== */}
+        {page === 'Python Importer' && (
+          <PythonImporter
+            notify={notify}
+            loadData={loadData}
+            API={API}
+            setPage={setPage}
+            onDraftCreated={(draft) => {
+              setStrategy(draft);
+              setPage('Strategy Builder');
+            }}
+          />
         )}
 
         {/* ==================== PAGE: REPORTS ==================== */}

@@ -672,6 +672,8 @@ def new_paper_worker_run(
     slippage_points: float = 0.0,
     brokerage_per_order: float = 0.0,
     charges_percent: float = 0.0,
+    lot_size: Optional[int] = None,
+    **kwargs: Any,
 ) -> dict[str, Any]:
     """Create a new background paper trading worker state record for a `RULE_BUILDER` strategy."""
     errors = validate_strategy(strategy)
@@ -683,7 +685,8 @@ def new_paper_worker_run(
     exec_cfg = strategy.get("execution") or {}
     inst_cfg = exec_cfg.get("instrument") or {}
     symbol = inst_cfg.get("underlying") or (strategy.get("meta") or {}).get("symbol") or "NIFTY 50"
-    lot_size, lot_warnings = _resolve_lot_size_with_warning(strategy)
+    lot_override = lot_size if lot_size is not None else kwargs.get("lot_size_override")
+    eff_lot_size, lot_warnings = _resolve_lot_size_with_warning(strategy, lot_size_override=lot_override)
 
     return {
         "id": str(uuid4()),
@@ -709,7 +712,7 @@ def new_paper_worker_run(
         "chargesPercent": float(charges_percent),
         "lastProcessedCandleKey": None,
         "lastEvaluatedAtIst": None,
-        "lotSize": lot_size,
+        "lotSize": eff_lot_size,
         "warnings": lot_warnings,
         "message": (
             f"Paper worker started ({lot_warnings[0]})" if lot_warnings
@@ -761,12 +764,12 @@ def step_paper_worker_run(
 
     exec_cfg = strategy.get("execution") or {}
     inst_cfg = exec_cfg.get("instrument") or {}
-    lot_size = _require_lot_size(strategy)
+    open_pos = worker_run.get("openPosition")
+    lot_size = int(worker_run.get("lotSize") or (open_pos.get("lotSize") if open_pos else None) or _require_lot_size(strategy))
     max_trades = int(worker_run.get("maxTradesPerDay", 3))
     max_loss = float(worker_run.get("maxDailyLoss", 2000.0))
 
     # 1. Step existing open position first
-    open_pos = worker_run.get("openPosition")
     if open_pos is not None:
         step_res = step_open_position(
             position=open_pos,
